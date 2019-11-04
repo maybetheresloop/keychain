@@ -19,9 +19,18 @@ func NewItem(key []byte, value []byte) *Item {
 	}
 
 	return &Item{
-		KeySize: int64(keySize),
+		KeySize:   int64(keySize),
 		ValueSize: int64(valueSize),
-		Key: key,
-		Value: value,
+		Key:       key,
+		Value:     value,
+	}
+}
+
+func NewItemDeleteMarker(key []byte) *Item {
+	return &Item{
+		KeySize:   int64(len(key)),
+		Key:       key,
+		ValueSize: -1,
+		Value:     nil,
 	}
 }

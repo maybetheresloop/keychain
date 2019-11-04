@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"os"
 
@@ -12,14 +12,27 @@ import (
 type Keychain struct {
 	readHandle  *os.File
 	writeHandle *os.File
-	writeBuffer *bufio.Writer
+	writeBuffer *proto.Writer
 	entries     art.Tree
 	counter     uint64
+	offset      int64
+}
+
+func valueOffset(keyLen int) int64 {
+	return int64(2*8 + keyLen)
 }
 
 func Open(name string) (*Keychain, error) {
+	writeHandle, err := os.OpenFile(name, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	readHandle, err := os.Open(name)
-	writeHandle, err := os.OpenFile(name, os.O_APPEND, 0644)
+
+	stat, err := writeHandle.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	offset := stat.Size()
+
 	if err != nil {
 		return nil, err
 	}
@@ -38,14 +51,100 @@ func Open(name string) (*Keychain, error) {
 	return &Keychain{
 		readHandle:  readHandle,
 		writeHandle: writeHandle,
-		writeBuffer: bufio.NewWriter(writeHandle),
+		writeBuffer: proto.NewWriter(writeHandle),
 		entries:     entries,
+		offset:      offset,
 	}, nil
 }
 
-func (k *Keychain) Set(key []byte) ([]byte, error) {
+func (k *Keychain) appendItem(key []byte, value []byte) error {
+	if err := k.writeBuffer.WriteItem(proto.NewItem(key, value)); err != nil {
+		return err
+	}
 
-	return nil, nil
+	if err := k.writeBuffer.Flush(); err != nil {
+		return err
+	}
+
+	k.offset += int64(2*8 + len(key) + len(value))
+
+	return nil
+}
+
+func (k *Keychain) appendItemDelete(key []byte) error {
+	if err := k.writeBuffer.WriteItem(proto.NewItemDeleteMarker(key)); err != nil {
+		return err
+	}
+
+	if err := k.writeBuffer.Flush(); err != nil {
+		return err
+	}
+
+	k.offset += int64(2*8 + len(key))
+
+	return nil
+}
+
+func (k *Keychain) Set(key []byte, value []byte) error {
+	v, found := k.entries.Search(key)
+	if !found {
+		valuePos := k.offset + valueOffset(len(key))
+		if err := k.appendItem(key, value); err != nil {
+			return err
+		}
+
+		entry := &proto.Entry{
+			FileID:    0,
+			ValueSize: int64(len(value)),
+			ValuePos:  valuePos,
+		}
+
+		k.entries.Insert(key, art.Value(entry))
+
+		return nil
+	}
+
+	entry := v.(*proto.Entry)
+
+	if entry.ValueSize == -1 {
+		goto insert
+	} else {
+		oldValue, err := k.readValue(entry.ValuePos, entry.ValueSize)
+		if err != nil {
+			return err
+		}
+
+		if bytes.Compare(value, oldValue) != 0 {
+			goto insert
+		}
+	}
+
+	return nil
+
+insert:
+	valuePos := k.offset + valueOffset(len(key))
+	if err := k.appendItem(key, value); err != nil {
+		return err
+	}
+
+	entry.ValuePos = valuePos
+	entry.ValueSize = int64(len(value))
+
+	return nil
+}
+
+func (k *Keychain) readValue(offset int64, size int64) ([]byte, error) {
+	value := make([]byte, size)
+	n, err := k.readHandle.ReadAt(value, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	if int64(n) != size {
+		return nil, errors.New("could not read full value")
+	}
+
+	return value, nil
 }
 
 func (k *Keychain) Get(key []byte) ([]byte, error) {
@@ -54,22 +153,30 @@ func (k *Keychain) Get(key []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	entry := v.(proto.Entry)
+	entry := v.(*proto.Entry)
 	if entry.ValueSize == -1 {
 		return nil, nil
 	}
 
-	value := make([]byte, entry.ValueSize)
-	n, err := k.readHandle.ReadAt(value, entry.ValuePos)
-	if err != nil {
-		return nil, err
+	return k.readValue(entry.ValuePos, entry.ValueSize)
+}
+
+func (k *Keychain) Remove(key []byte) (bool, error) {
+	v, found := k.entries.Search(key)
+	if found {
+		entry := v.(*proto.Entry)
+		if entry.ValueSize != -1 {
+
+			if err := k.appendItemDelete(key); err != nil {
+				return false, err
+			}
+
+			entry.ValueSize = -1
+			return true, nil
+		}
 	}
 
-	if int64(n) != entry.ValueSize {
-		return nil, errors.New("could not read full value")
-	}
-
-	return value, nil
+	return false, nil
 }
 
 func (k *Keychain) Flush() error {
@@ -81,4 +188,6 @@ func (k *Keychain) Close() error {
 
 	_ = k.readHandle.Close()
 	_ = k.writeHandle.Close()
+
+	return nil
 }

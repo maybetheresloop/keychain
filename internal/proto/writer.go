@@ -16,6 +16,10 @@ func NewWriter(wr io.Writer) *Writer {
 	}
 }
 
+func NewWriterFromBuffered(wr *bufio.Writer) *Writer {
+	return &Writer{wr: wr}
+}
+
 func (w *Writer) WriteItem(item *Item) error {
 
 	if err := binary.Write(w.wr, binary.BigEndian, item.KeySize); err != nil {
@@ -26,12 +30,16 @@ func (w *Writer) WriteItem(item *Item) error {
 		return err
 	}
 
-	if _, err := w.wr.Write(item.Key); err != nil {
-		return err
+	if item.KeySize > 0 {
+		if _, err := w.wr.Write(item.Key); err != nil {
+			return err
+		}
 	}
 
-	if _, err := w.wr.Write(item.Value); err != nil {
-		return err
+	if item.ValueSize > 0 {
+		if _, err := w.wr.Write(item.Value); err != nil {
+			return err
+		}
 	}
 
 	return nil
