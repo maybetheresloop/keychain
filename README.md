@@ -10,11 +10,15 @@ for updates! 😄
 
 ## Roadmap
 
+### Basics
 - [x] Set key/value pair
 - [x] Get value for a key
 - [x] Remove value for a key
 - [ ] Merge old files
+- [ ] Command-line shell
+
+### Long-Term
 - [ ] Transactions
-- [ ] Fault tolerance through Raft consensus
+- [ ] Cluster mode with fault-tolerance through Raft consensus
 
 
