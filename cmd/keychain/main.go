@@ -8,6 +8,8 @@ import (
 	"github.com/urfave/cli"
 )
 
+var DefaultDbFile = "keychain.db"
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "keychain"
@@ -20,7 +22,7 @@ func main() {
 
 	fileFlag := cli.StringFlag{
 		Name:      "file, f",
-		Value:     "keychain.db",
+		Value:     DefaultDbFile,
 		Usage:     "Database `FILE` to use",
 		TakesFile: true,
 	}
