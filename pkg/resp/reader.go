@@ -38,13 +38,20 @@ func (r *Reader) ReadMessage() (interface{}, error) {
 			return nil, err
 		}
 
-		return r.ReadBulkString(length)
+		return r.readBulkString(length)
+	case Array:
+		length, err := strconv.ParseInt(string(line[1:]), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		return r.readArray(length)
 	}
 
 	return nil, fmt.Errorf("resp: failed to parse %q", line)
 }
 
-func (r *Reader) ReadBulkString(length int64) ([]byte, error) {
+func (r *Reader) readBulkString(length int64) ([]byte, error) {
 	b := make([]byte, length)
 
 	_, err := io.ReadFull(r.rd, b)
@@ -63,6 +70,20 @@ func (r *Reader) ReadBulkString(length int64) ([]byte, error) {
 	}
 
 	return b, nil
+}
+
+func (r *Reader) readArray(length int64) ([]interface{}, error) {
+	s := make([]interface{}, length)
+	for i := int64(0); i < length; i++ {
+		item, err := r.ReadMessage()
+		if err != nil {
+			return nil, err
+		}
+
+		s[i] = item
+	}
+
+	return s, nil
 }
 
 func NewReader(rd io.Reader) *Reader {
