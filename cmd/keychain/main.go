@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -14,10 +13,6 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "keychain"
 	app.Usage = "A key/value store backed by a persistent log."
-	app.Action = func(c *cli.Context) error {
-		fmt.Println("Hello, friend!")
-		return nil
-	}
 	app.Version = "0.1.0"
 
 	fileFlag := cli.StringFlag{
