@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"sync"
 
 	"github.com/maybetheresloop/keychain/internal/proto"
 	art "github.com/plar/go-adaptive-radix-tree"
 )
 
 type Keychain struct {
+	sync.RWMutex
+
 	readHandle  *os.File
 	writeHandle *os.File
 	writeBuffer *proto.Writer
@@ -86,6 +89,8 @@ func (k *Keychain) appendItemDelete(key []byte) error {
 }
 
 func (k *Keychain) Set(key []byte, value []byte) error {
+	k.Lock()
+	defer k.Unlock()
 	v, found := k.entries.Search(key)
 	if !found {
 		valuePos := k.offset + valueOffset(len(key))
@@ -148,10 +153,14 @@ func (k *Keychain) readValue(offset int64, size int64) ([]byte, error) {
 }
 
 func (k *Keychain) Get(key []byte) ([]byte, error) {
+	k.RLock()
 	v, ok := k.entries.Search(key)
 	if !ok {
+		k.RUnlock()
 		return nil, nil
 	}
+
+	defer k.RUnlock()
 
 	entry := v.(*proto.Entry)
 	if entry.ValueSize == -1 {
@@ -162,10 +171,13 @@ func (k *Keychain) Get(key []byte) ([]byte, error) {
 }
 
 func (k *Keychain) Remove(key []byte) (bool, error) {
+	k.Lock()
+
 	v, found := k.entries.Search(key)
 	if found {
 		entry := v.(*proto.Entry)
 		if entry.ValueSize != -1 {
+			defer k.Unlock()
 
 			if err := k.appendItemDelete(key); err != nil {
 				return false, err
@@ -176,6 +188,7 @@ func (k *Keychain) Remove(key []byte) (bool, error) {
 		}
 	}
 
+	k.Unlock()
 	return false, nil
 }
 

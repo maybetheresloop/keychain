@@ -7,14 +7,6 @@ import (
 	"strconv"
 )
 
-const (
-	SimpleString = '+'
-	Error        = '-'
-	Integer      = ':'
-	BulkString   = '$'
-	Array        = '*'
-)
-
 type Reader struct {
 	rd *bufio.Reader
 }
@@ -43,6 +35,12 @@ func (r *Reader) ReadMessage() (interface{}, error) {
 		length, err := strconv.ParseInt(string(line[1:]), 10, 64)
 		if err != nil {
 			return nil, err
+		}
+
+		if length == -1 {
+			return nil, nil
+		} else if length < -1 {
+			return nil, &InvalidArrayLength{length: length}
 		}
 
 		return r.readArray(length)

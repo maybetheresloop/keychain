@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"net"
 	"os"
 
@@ -16,37 +15,25 @@ import (
 const SockAddrUnix = "/var/keychain/keychain.sock"
 const SockAddrTcp = ":7878"
 
-func echoServer(conn net.Conn) {
-	io.Copy(conn, conn)
-	conn.Close()
-}
+// Processes a client connection. This can be a connection through either a TCP socket or a Unix domain socket.
+func processConnection(conn net.Conn, state *State) {
+	defer conn.Close()
+	r := resp.NewReader(conn)
+	w := resp
 
-func processConnection(conn net.Conn) {
+	for {
+		message, err := r.ReadMessage()
 
+		// RESP parsing errors are fatal and cause the connection to be closed immediately.
+		if err != nil {
+			break
+		}
+
+	}
 }
 
 type State struct {
-}
-
-func handleConnection(conn net.Conn, state *State) {
-	//r := resp.NewReader(conn)
-	//
-	//for {
-	//
-	//}
-}
-
-func startUnixServer(lis net.Listener) {
-	for {
-		conn, err := lis.Accept()
-		if err != nil {
-			log.Fatalf("accept error: %v", err)
-		}
-
-		log.Printf("accepted connection from %s\n", conn.RemoteAddr().String())
-
-		_ = conn.Close()
-	}
+	keychain *internal.Keychain
 }
 
 func run(c *cli.Context) error {
@@ -65,29 +52,22 @@ func run(c *cli.Context) error {
 		return err
 	}
 
+	keychain, err := internal.Open("")
+	if err != nil {
+		log.Errorf("failed to open database file: %v", err)
+	}
+
+	state := &State{
+		keychain: keychain,
+	}
+
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
 			log.Errorf("error accepting connection: %v", err)
 		}
 
-		r := resp.NewReader(conn)
-
-		for {
-			msg, err := r.ReadMessage()
-			if err != nil {
-				log.Errorf("error reading message: %v", err)
-				continue
-			}
-
-			switch v := msg.(type) {
-			case string:
-				log.Infof("received command: %q", v)
-			case int, int64:
-				log.Infof("received integer: %d", v)
-			}
-		}
-
+		go processConnection(conn, state)
 	}
 
 	return nil
@@ -116,30 +96,4 @@ func main() {
 		log.Info(err)
 	}
 
-	//if err := os.RemoveAll(SockAddrUnix); err != nil {
-	//	log.Panic(err)
-	//}
-
-	//lisUnix, err := net.Listen("unix", SockAddrUnix)
-	//if err != nil {
-	//	log.Fatalf("listen error: %v", err)
-	//}
-
-	//lisTcp, err := net.Listen("tcp", SockAddrTcp)
-	//if err != nil {
-	//	log.Fatalf("listen error: %v", err)
-	//}
-
-	//go startUnixServer(lisUnix)
-
-	//for {
-	//	conn, err := lisTcp.Accept()
-	//	if err != nil {
-	//		log.Fatalf("accept error: %v", err)
-	//	}
-	//
-	//	log.Printf("accepted connection from %s\n", conn.RemoteAddr().String())
-	//
-	//	go echoServer(conn)
-	//}
 }
