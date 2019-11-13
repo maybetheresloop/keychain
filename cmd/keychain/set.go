@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/maybetheresloop/keychain/internal"
+	"github.com/maybetheresloop/keychain"
 	"github.com/urfave/cli"
 )
 
@@ -18,14 +18,14 @@ func Set(c *cli.Context) error {
 
 	fp := c.String("file")
 
-	keychain, err := internal.Open(fp)
+	keys, err := keychain.Open(fp)
 	if err != nil {
 		return err
 	}
 
-	defer keychain.Close()
+	defer keys.Close()
 
-	if err := keychain.Set([]byte(key), []byte(value)); err != nil {
+	if err := keys.Set([]byte(key), []byte(value)); err != nil {
 		return err
 	}
 

@@ -1,4 +1,4 @@
-package proto
+package data
 
 type Entry struct {
 	FileID    uint64

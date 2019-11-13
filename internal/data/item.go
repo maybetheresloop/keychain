@@ -1,4 +1,4 @@
-package proto
+package data
 
 type Item struct {
 	KeySize   int64

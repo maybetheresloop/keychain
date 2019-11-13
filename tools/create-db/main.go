@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/maybetheresloop/keychain/internal/proto"
+	"github.com/maybetheresloop/keychain/internal/data"
 )
 
 var fp string
@@ -44,7 +44,7 @@ func main() {
 	}
 
 	r := csv.NewReader(bufio.NewReader(in))
-	w := proto.NewWriter(outFile)
+	w := data.NewWriter(outFile)
 
 	count := 0
 
@@ -61,7 +61,7 @@ func main() {
 			log.Fatal("record must have at least two fields")
 		}
 
-		if err := w.WriteItem(proto.NewItem([]byte(record[0]), []byte(record[1]))); err != nil {
+		if err := w.WriteItem(data.NewItem([]byte(record[0]), []byte(record[1]))); err != nil {
 			log.Fatal(err)
 		}
 		count += 1

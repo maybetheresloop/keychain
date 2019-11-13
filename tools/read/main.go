@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/maybetheresloop/keychain/internal/proto"
+	"github.com/maybetheresloop/keychain/internal/data"
 )
 
 func main() {
@@ -16,9 +16,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	r := proto.NewEntryReader(f, 0)
+	r := data.NewEntryReader(f, 0)
 
-	var entry *proto.Entry
+	var entry *data.Entry
 	var key []byte
 	for key, entry, err = r.ReadEntry(); err == nil; key, entry, err = r.ReadEntry() {
 		fmt.Printf("key: %q, value size: %d, value offset: %d\n", string(key), entry.ValueSize, entry.ValuePos)

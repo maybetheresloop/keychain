@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/maybetheresloop/keychain/internal"
+	"github.com/maybetheresloop/keychain"
+
 	"github.com/maybetheresloop/keychain/internal/util"
 	"github.com/urfave/cli"
 )
@@ -21,14 +22,14 @@ func Get(c *cli.Context) error {
 		return err
 	}
 
-	keychain, err := internal.Open(fp)
+	keys, err := keychain.Open(fp)
 	if err != nil {
 		return err
 	}
 
-	defer keychain.Close()
+	defer keys.Close()
 
-	value, err := keychain.Get([]byte(key))
+	value, err := keys.Get([]byte(key))
 	if err != nil {
 		return err
 	}

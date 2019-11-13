@@ -4,8 +4,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/maybetheresloop/keychain/internal"
-
+	"github.com/maybetheresloop/keychain"
 	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -31,14 +30,14 @@ func processConnection(conn net.Conn, state *State) {
 }
 
 type State struct {
-	keychain *internal.Keychain
+	keys *keychain.Keychain
 }
 
 func run(c *cli.Context) error {
 	fp := c.String("file")
 	log.Infof("Using database file: %s", fp)
 
-	_, err := internal.Open(fp)
+	_, err := keychain.Open(fp)
 	if err != nil {
 		return err
 	}
@@ -50,13 +49,13 @@ func run(c *cli.Context) error {
 		return err
 	}
 
-	keychain, err := internal.Open("")
+	keys, err := keychain.Open("")
 	if err != nil {
 		log.Errorf("failed to open database file: %v", err)
 	}
 
 	state := &State{
-		keychain: keychain,
+		keys: keys,
 	}
 
 	for {

@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/maybetheresloop/keychain/internal/proto"
+	"github.com/maybetheresloop/keychain/internal/data"
 	art "github.com/plar/go-adaptive-radix-tree"
 )
 
@@ -19,7 +19,7 @@ type Keychain struct {
 	mtx         sync.RWMutex
 	readHandle  *os.File
 	writeHandle *os.File
-	writeBuffer *proto.Writer
+	writeBuffer *data.Writer
 	entries     art.Tree
 	counter     uint64
 	offset      int64
@@ -51,10 +51,10 @@ func OpenConf(name string, conf *Conf) (*Keychain, error) {
 
 	entries := art.New()
 
-	r := proto.NewEntryReader(readHandle, 1)
+	r := data.NewEntryReader(readHandle, 1)
 
 	// Populate radix tree with entries from the database file.
-	var entry *proto.Entry
+	var entry *data.Entry
 	var key []byte
 	for key, entry, err = r.ReadEntry(); err == nil; key, entry, err = r.ReadEntry() {
 		entries.Insert(key, art.Value(entry))
@@ -63,7 +63,7 @@ func OpenConf(name string, conf *Conf) (*Keychain, error) {
 	keys := &Keychain{
 		readHandle:  readHandle,
 		writeHandle: writeHandle,
-		writeBuffer: proto.NewWriter(writeHandle),
+		writeBuffer: data.NewWriter(writeHandle),
 		entries:     entries,
 		offset:      offset,
 		sync:        false,
@@ -85,7 +85,7 @@ func Open(name string) (*Keychain, error) {
 // append is used internally by appendItem* and does the actual appending and flushing of
 // the underlying buffer. Additionally, this will call Sync() on the underlying file
 // so that the new item is synchronized to disk.
-func (k *Keychain) append(item *proto.Item) error {
+func (k *Keychain) append(item *data.Item) error {
 	if err := k.writeBuffer.WriteItem(item); err != nil {
 		return err
 	}
@@ -109,12 +109,12 @@ func (k *Keychain) append(item *proto.Item) error {
 
 // appendItem appends a key-value pair to the end of the store file's log.
 func (k *Keychain) appendItem(key []byte, value []byte) error {
-	return k.append(proto.NewItem(key, value))
+	return k.append(data.NewItem(key, value))
 }
 
 // appendItemDelete appends a special delete marker for the specified key.
 func (k *Keychain) appendItemDelete(key []byte) error {
-	return k.append(proto.NewItemDeleteMarker(key))
+	return k.append(data.NewItemDeleteMarker(key))
 }
 
 // Set inserts a key-value pair into the store. If the key already exists in the store, then
@@ -138,7 +138,7 @@ func (k *Keychain) Set(key []byte, value []byte) error {
 	// If the trie already contains the entry, simply update the existing entry. Otherwise,
 	// insert the new entry into the trie.
 	if found {
-		entry := v.(*proto.Entry)
+		entry := v.(*data.Entry)
 		entry.ValuePos = valuePos
 		entry.ValueSize = valueSize
 
@@ -146,7 +146,7 @@ func (k *Keychain) Set(key []byte, value []byte) error {
 		return nil
 	}
 
-	entry := proto.NewEntry(0, valueSize, valuePos)
+	entry := data.NewEntry(0, valueSize, valuePos)
 	k.entries.Insert(key, art.Value(entry))
 
 	k.mtx.Unlock()
@@ -180,7 +180,7 @@ func (k *Keychain) Get(key []byte) ([]byte, error) {
 
 	defer k.mtx.RUnlock()
 
-	entry := v.(*proto.Entry)
+	entry := v.(*data.Entry)
 	if entry.ValueSize == -1 {
 		return nil, nil
 	}
@@ -194,7 +194,7 @@ func (k *Keychain) Remove(key []byte) (bool, error) {
 
 	v, found := k.entries.Search(key)
 	if found {
-		entry := v.(*proto.Entry)
+		entry := v.(*data.Entry)
 		if entry.ValueSize != -1 {
 			defer k.mtx.Unlock()
 
