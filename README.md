@@ -1,4 +1,4 @@
-# Keychain
+# Keychain [![Actions Status](https://github.com/maybetheresloop/keychain/workflows/Go/badge.svg)](https://github.com/maybetheresloop/keychain)
 
 Keychain is a Go implementation of the Bitcask key-value store. 🔑 
 
