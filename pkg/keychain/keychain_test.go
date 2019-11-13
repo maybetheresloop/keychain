@@ -77,6 +77,10 @@ func TestAllOperations(t *testing.T) {
 	set(keys, []byte("key"), []byte("valuenew"), t)
 	getAndExpect(keys, []byte("key"), []byte("valuenew"), t)
 
+	// Test re-insertion of key with same value
+	set(keys, []byte("key3"), []byte("value3"), t)
+	getAndExpect(keys, []byte("key3"), []byte("value3"), t)
+
 	// Test close database
 	if err := keys.Close(); err != nil {
 		t.Fatalf("failed to close database: %v", err)
@@ -95,7 +99,7 @@ func TestAllOperations(t *testing.T) {
 	getAndExpect(keys2, []byte("key4"), []byte(""), t)
 
 	// Test close database
-	if err := keys.Close(); err != nil {
+	if err := keys2.Close(); err != nil {
 		t.Fatalf("failed to close database: %v", err)
 	}
 }

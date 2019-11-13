@@ -1,7 +1,6 @@
 package keychain
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"sync"
@@ -98,51 +97,35 @@ func (k *Keychain) appendItemDelete(key []byte) error {
 // the previous value is overwritten.
 func (k *Keychain) Set(key []byte, value []byte) error {
 	k.mtx.Lock()
-	defer k.mtx.Unlock()
+
 	v, found := k.entries.Search(key)
-	if !found {
-		valuePos := k.offset + valueOffset(len(key))
-		if err := k.appendItem(key, value); err != nil {
-			return err
-		}
-
-		entry := &proto.Entry{
-			FileID:    0,
-			ValueSize: int64(len(value)),
-			ValuePos:  valuePos,
-		}
-
-		k.entries.Insert(key, art.Value(entry))
-
-		return nil
-	}
-
-	entry := v.(*proto.Entry)
-
-	if entry.ValueSize == -1 {
-		goto insert
-	} else {
-		oldValue, err := k.readValue(entry.ValuePos, entry.ValueSize)
-		if err != nil {
-			return err
-		}
-
-		if bytes.Compare(value, oldValue) != 0 {
-			goto insert
-		}
-	}
-
-	return nil
-
-insert:
 	valuePos := k.offset + valueOffset(len(key))
+	valueSize := int64(len(value))
+
+	// We insert the new value unconditionally, even if the key was already present
+	// in the database with the same value. Otherwise, we would have to do a disk seek
+	// to check the current value, and in this case we have decided to optimize for performance
+	// and not for space.
 	if err := k.appendItem(key, value); err != nil {
+		k.mtx.Unlock()
 		return err
 	}
 
-	entry.ValuePos = valuePos
-	entry.ValueSize = int64(len(value))
+	// If the trie already contains the entry, simply update the existing entry. Otherwise,
+	// insert the new entry into the trie.
+	if found {
+		entry := v.(*proto.Entry)
+		entry.ValuePos = valuePos
+		entry.ValueSize = valueSize
 
+		k.mtx.Unlock()
+		return nil
+	}
+
+	entry := proto.NewEntry(0, valueSize, valuePos)
+	k.entries.Insert(key, art.Value(entry))
+
+	k.mtx.Unlock()
 	return nil
 }
 
@@ -181,6 +164,7 @@ func (k *Keychain) Get(key []byte) ([]byte, error) {
 	return k.readValue(entry.ValuePos, entry.ValueSize)
 }
 
+// Removes a key-value pair from the store. Returns true only if an item was removed.
 func (k *Keychain) Remove(key []byte) (bool, error) {
 	k.mtx.Lock()
 
@@ -208,11 +192,19 @@ func (k *Keychain) Flush() error {
 	return k.writeBuffer.Flush()
 }
 
+// Closes the store.
 func (k *Keychain) Close() error {
-	_ = k.Flush()
+	if err := k.Flush(); err != nil {
+		return err
+	}
 
-	_ = k.readHandle.Close()
-	_ = k.writeHandle.Close()
+	if err := k.readHandle.Close(); err != nil {
+		return err
+	}
+
+	if err := k.writeHandle.Close(); err != nil {
+		return err
+	}
 
 	return nil
 }
