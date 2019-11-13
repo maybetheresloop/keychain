@@ -64,13 +64,19 @@ func Open(name string) (*Keychain, error) {
 }
 
 // append is used internally by appendItem* and does the actual appending and flushing of
-// the underlying buffer.
+// the underlying buffer. Additionally, this will call Sync() on the underlying file
+// so that the new item is synchronized to disk.
 func (k *Keychain) append(item *proto.Item) error {
 	if err := k.writeBuffer.WriteItem(item); err != nil {
 		return err
 	}
 
 	if err := k.writeBuffer.Flush(); err != nil {
+		return err
+	}
+
+	// Sync the new items to the underlying storage.
+	if err := k.writeHandle.Sync(); err != nil {
 		return err
 	}
 
@@ -83,7 +89,6 @@ func (k *Keychain) append(item *proto.Item) error {
 }
 
 // appendItem appends a key-value pair to the end of the store file's log.
-// The underlying writer is flushed after the append is done.
 func (k *Keychain) appendItem(key []byte, value []byte) error {
 	return k.append(proto.NewItem(key, value))
 }
