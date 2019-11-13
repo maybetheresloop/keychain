@@ -21,10 +21,6 @@ type Keychain struct {
 	offset      int64
 }
 
-func valueOffset(keyLen int) int64 {
-	return int64(2*8 + keyLen)
-}
-
 // Opens a Keychain store using the specified file path. If the file does not exist, then
 // it is created.
 func Open(name string) (*Keychain, error) {
@@ -46,7 +42,6 @@ func Open(name string) (*Keychain, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	offset := stat.Size()
 
 	entries := art.New()
@@ -151,6 +146,7 @@ insert:
 	return nil
 }
 
+// Reads a value of the given size at the offset.
 func (k *Keychain) readValue(offset int64, size int64) ([]byte, error) {
 	value := make([]byte, size)
 	n, err := k.readHandle.ReadAt(value, offset)
@@ -219,4 +215,8 @@ func (k *Keychain) Close() error {
 	_ = k.writeHandle.Close()
 
 	return nil
+}
+
+func valueOffset(keyLen int) int64 {
+	return int64(2*8 + keyLen)
 }
