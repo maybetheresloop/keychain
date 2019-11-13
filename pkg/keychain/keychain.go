@@ -9,6 +9,11 @@ import (
 	art "github.com/plar/go-adaptive-radix-tree"
 )
 
+// Conf represents the configuration options for a Keychain store.
+type Conf struct {
+	sync bool
+}
+
 // Keychain represents an instance of a Keychain store.
 type Keychain struct {
 	mtx         sync.RWMutex
@@ -18,11 +23,12 @@ type Keychain struct {
 	entries     art.Tree
 	counter     uint64
 	offset      int64
+	sync        bool
 }
 
-// Opens a Keychain store using the specified file path. If the file does not exist, then
-// it is created.
-func Open(name string) (*Keychain, error) {
+// Opens a Keychain store using the specified file path and configuration. If the file does not exist,
+// then it is created.
+func OpenConf(name string, conf *Conf) (*Keychain, error) {
 
 	// Two handles to the file: one is used for reading, the other is used for writing.
 	writeHandle, err := os.OpenFile(name, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -54,13 +60,26 @@ func Open(name string) (*Keychain, error) {
 		entries.Insert(key, art.Value(entry))
 	}
 
-	return &Keychain{
+	keys := &Keychain{
 		readHandle:  readHandle,
 		writeHandle: writeHandle,
 		writeBuffer: proto.NewWriter(writeHandle),
 		entries:     entries,
 		offset:      offset,
-	}, nil
+		sync:        false,
+	}
+
+	if conf != nil {
+		keys.sync = conf.sync
+	}
+
+	return keys, nil
+}
+
+// Opens a Keychain store using the specified file path. If the file does not exist, then
+// it is created.
+func Open(name string) (*Keychain, error) {
+	return OpenConf(name, nil)
 }
 
 // append is used internally by appendItem* and does the actual appending and flushing of
