@@ -4,8 +4,6 @@ import (
 	"net"
 	"os"
 
-	"github.com/maybetheresloop/keychain/pkg/resp"
-
 	"github.com/maybetheresloop/keychain/internal"
 
 	log "github.com/sirupsen/logrus"
@@ -18,18 +16,18 @@ const SockAddrTcp = ":7878"
 // Processes a client connection. This can be a connection through either a TCP socket or a Unix domain socket.
 func processConnection(conn net.Conn, state *State) {
 	defer conn.Close()
-	r := resp.NewReader(conn)
-	w := resp
-
-	for {
-		message, err := r.ReadMessage()
-
-		// RESP parsing errors are fatal and cause the connection to be closed immediately.
-		if err != nil {
-			break
-		}
-
-	}
+	//r := resp.NewReader(conn)
+	//w := resp
+	//
+	//for {
+	//	message, err := r.ReadMessage()
+	//
+	//	// RESP parsing errors are fatal and cause the connection to be closed immediately.
+	//	if err != nil {
+	//		break
+	//	}
+	//
+	//}
 }
 
 type State struct {
