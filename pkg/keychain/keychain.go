@@ -12,7 +12,7 @@ import (
 
 // Keychain represents an instance of a Keychain store.
 type Keychain struct {
-	sync.RWMutex
+	mtx sync.RWMutex
 
 	readHandle  *os.File
 	writeHandle *os.File
@@ -101,8 +101,8 @@ func (k *Keychain) appendItemDelete(key []byte) error {
 // Set inserts a key-value pair into the store. If the key already exists in the store, then
 // the previous value is overwritten.
 func (k *Keychain) Set(key []byte, value []byte) error {
-	k.Lock()
-	defer k.Unlock()
+	k.mtx.Lock()
+	defer k.mtx.Unlock()
 	v, found := k.entries.Search(key)
 	if !found {
 		valuePos := k.offset + valueOffset(len(key))
@@ -167,14 +167,14 @@ func (k *Keychain) readValue(offset int64, size int64) ([]byte, error) {
 // Get retrieves from the store the value corresponding to the specified key. If the key does not
 // exist, then nil is returned.
 func (k *Keychain) Get(key []byte) ([]byte, error) {
-	k.RLock()
+	k.mtx.RLock()
 	v, ok := k.entries.Search(key)
 	if !ok {
-		k.RUnlock()
+		k.mtx.RUnlock()
 		return nil, nil
 	}
 
-	defer k.RUnlock()
+	defer k.mtx.RUnlock()
 
 	entry := v.(*proto.Entry)
 	if entry.ValueSize == -1 {
@@ -185,13 +185,13 @@ func (k *Keychain) Get(key []byte) ([]byte, error) {
 }
 
 func (k *Keychain) Remove(key []byte) (bool, error) {
-	k.Lock()
+	k.mtx.Lock()
 
 	v, found := k.entries.Search(key)
 	if found {
 		entry := v.(*proto.Entry)
 		if entry.ValueSize != -1 {
-			defer k.Unlock()
+			defer k.mtx.Unlock()
 
 			if err := k.appendItemDelete(key); err != nil {
 				return false, err
@@ -202,7 +202,7 @@ func (k *Keychain) Remove(key []byte) (bool, error) {
 		}
 	}
 
-	k.Unlock()
+	k.mtx.Unlock()
 	return false, nil
 }
 
