@@ -12,8 +12,7 @@ import (
 
 // Keychain represents an instance of a Keychain store.
 type Keychain struct {
-	mtx sync.RWMutex
-
+	mtx         sync.RWMutex
 	readHandle  *os.File
 	writeHandle *os.File
 	writeBuffer *proto.Writer
@@ -70,8 +69,10 @@ func Open(name string) (*Keychain, error) {
 	}, nil
 }
 
-func (k *Keychain) appendItem(key []byte, value []byte) error {
-	if err := k.writeBuffer.WriteItem(proto.NewItem(key, value)); err != nil {
+// append is used internally by appendItem* and does the actual appending and flushing of
+// the underlying buffer.
+func (k *Keychain) append(item *proto.Item) error {
+	if err := k.writeBuffer.WriteItem(item); err != nil {
 		return err
 	}
 
@@ -79,23 +80,23 @@ func (k *Keychain) appendItem(key []byte, value []byte) error {
 		return err
 	}
 
-	k.offset += int64(2*8 + len(key) + len(value))
+	k.offset += int64(2*8 + len(item.Key))
+	if len(item.Value) > 0 {
+		k.offset += int64(len(item.Value))
+	}
 
 	return nil
 }
 
+// appendItem appends a key-value pair to the end of the store file's log.
+// The underlying writer is flushed after the append is done.
+func (k *Keychain) appendItem(key []byte, value []byte) error {
+	return k.append(proto.NewItem(key, value))
+}
+
+// appendItemDelete appends a special delete marker for the specified key.
 func (k *Keychain) appendItemDelete(key []byte) error {
-	if err := k.writeBuffer.WriteItem(proto.NewItemDeleteMarker(key)); err != nil {
-		return err
-	}
-
-	if err := k.writeBuffer.Flush(); err != nil {
-		return err
-	}
-
-	k.offset += int64(2*8 + len(key))
-
-	return nil
+	return k.append(proto.NewItemDeleteMarker(key))
 }
 
 // Set inserts a key-value pair into the store. If the key already exists in the store, then
@@ -206,6 +207,7 @@ func (k *Keychain) Remove(key []byte) (bool, error) {
 	return false, nil
 }
 
+// Flushes the underlying write buffer.
 func (k *Keychain) Flush() error {
 	return k.writeBuffer.Flush()
 }
