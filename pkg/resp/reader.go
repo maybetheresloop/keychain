@@ -2,6 +2,7 @@ package resp
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -11,7 +12,30 @@ type Reader struct {
 	rd *bufio.Reader
 }
 
-func (r *Reader) ReadMessage() (interface{}, error) {
+type ArrayParser func(r *Reader, num int64) (interface{}, error)
+
+// Convenience function for parsing a slice of strings.
+func StringSliceParser(r *Reader, num int64) ([]string, error) {
+
+	s := make([]string, 0, num)
+
+	for i := int64(0); i < num; i++ {
+		line, _, err := r.rd.ReadLine()
+		if err != nil {
+			return nil, err
+		}
+
+		if line[0] == SimpleString {
+			s = append(s, string(line[1:]))
+		} else {
+			return nil, errors.New("resp: unexpected type, expected string")
+		}
+	}
+
+	return s, nil
+}
+
+func (r *Reader) ReadMessage(parser ArrayParser) (interface{}, error) {
 	line, _, err := r.rd.ReadLine()
 	if err != nil {
 		return nil, err
@@ -43,7 +67,7 @@ func (r *Reader) ReadMessage() (interface{}, error) {
 			return nil, &InvalidArrayLength{length: length}
 		}
 
-		return r.readArray(length)
+		return parser(r, length)
 	}
 
 	return nil, fmt.Errorf("resp: failed to parse %q", line)
@@ -70,10 +94,24 @@ func (r *Reader) readBulkString(length int64) ([]byte, error) {
 	return b, nil
 }
 
-func (r *Reader) readArray(length int64) ([]interface{}, error) {
+//func (r *Reader) readArray(length int64) ([]interface{}, error) {
+//	s := make([]interface{}, length)
+//	for i := int64(0); i < length; i++ {
+//		item, err := r.ReadMessage()
+//		if err != nil {
+//			return nil, err
+//		}
+//
+//		s[i] = item
+//	}
+//
+//	return s, nil
+//}
+
+func GenericSliceParser(r *Reader, length int64) (interface{}, error) {
 	s := make([]interface{}, length)
 	for i := int64(0); i < length; i++ {
-		item, err := r.ReadMessage()
+		item, err := r.ReadMessage(GenericSliceParser)
 		if err != nil {
 			return nil, err
 		}

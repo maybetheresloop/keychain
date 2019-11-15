@@ -11,7 +11,7 @@ func TestReadString(t *testing.T) {
 	expected := "hello, world"
 	r := NewReader(strings.NewReader(input))
 
-	result, err := r.ReadMessage()
+	result, err := r.ReadMessage(nil)
 	if err != nil {
 		t.Fatalf("error reading message - %v", err)
 	}
@@ -31,7 +31,7 @@ func TestReadError(t *testing.T) {
 	expected := NewRespError("Error message")
 	r := NewReader(strings.NewReader(input))
 
-	result, err := r.ReadMessage()
+	result, err := r.ReadMessage(nil)
 	if err != nil {
 		t.Fatalf("error reading message - %v", err)
 	}
@@ -58,7 +58,7 @@ func TestReadInteger(t *testing.T) {
 	for i, tt := range tests {
 		r := NewReader(strings.NewReader(tt.input))
 
-		result, err := r.ReadMessage()
+		result, err := r.ReadMessage(nil)
 		if err != nil {
 			t.Fatalf("tests[%d] - error reading message, %v", i, err)
 		}
@@ -88,7 +88,7 @@ func TestReadBulkString(t *testing.T) {
 	for i, tt := range tests {
 		r := NewReader(strings.NewReader(tt.input))
 
-		result, err := r.ReadMessage()
+		result, err := r.ReadMessage(nil)
 		if err != nil {
 			t.Fatalf("tests[%d] - error reading message, %v", i, err)
 		}
@@ -142,7 +142,7 @@ func TestReadArray(t *testing.T) {
 	for i, tt := range tests {
 		r := NewReader(strings.NewReader(tt.input))
 
-		result, err := r.ReadMessage()
+		result, err := r.ReadMessage(GenericSliceParser)
 		if err != nil {
 			t.Fatalf("tests[%d] - error reading message, %v", i, err)
 		}
