@@ -7,7 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/maybetheresloop/keychain/pkg/resp"
+	"github.com/maybetheresloop/keychain"
+
 	"github.com/urfave/cli"
 )
 
@@ -16,38 +17,89 @@ func prompt(sc *bufio.Scanner, addr string) bool {
 	return sc.Scan()
 }
 
-func runCmd(cmd string, tail []string) error {
+func runCmd(c client, cmd string, tail []string) error {
+	switch strings.ToLower(cmd) {
+	case "set":
+		res, err := c.Set(tail[0], tail[1])
+		if err != nil {
+			return err
+		}
+
+		switch v := res.(type) {
+		case string:
+			fmt.Printf("%s\n", v)
+		case []byte:
+			fmt.Println("(nil)")
+		default:
+			panic("unexpected")
+		}
+	case "get":
+		res, err := c.Get(tail[0])
+		if err != nil {
+			return err
+		}
+
+		if res == nil {
+			fmt.Println("(nil)")
+		} else {
+			fmt.Printf("%s\n", res)
+		}
+	case "del":
+		res, err := c.Del(tail...)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(res)
+	}
+
 	return nil
 }
 
-func run(c *cli.Context) error {
-	if c.NArg() > 0 {
-		return runCmd(c.Args().First(), c.Args().Tail())
+func run(ctx *cli.Context) error {
+	var (
+		c    client
+		name string
+	)
+
+	if name = "keychain.db"; name != "" {
+		keys, err := keychain.Open(name)
+		if err != nil {
+			return err
+		}
+		defer keys.Close()
+
+		c = &localClient{
+			keys:   keys,
+			dbName: name,
+		}
+	} else {
+		name = fmt.Sprintf("%s:%d", ctx.String("host"), ctx.Uint("port"))
 	}
 
-	return runCli(c)
+	if ctx.NArg() > 0 {
+		return runCmd(c, ctx.Args().First(), ctx.Args().Tail())
+	}
+
+	return runCli(c, name)
 }
 
-func runCli(c *cli.Context) error {
-	fmt.Println(c.NArg())
-
+func runCli(c client, name string) error {
 	fmt.Println("Welcome to keychain-cli!")
 
-	addr := fmt.Sprintf("%s:%d", c.String("host"), c.Uint("port"))
-
-	//_, err := net.Dial("tcp", addr)
-	//if err != nil {
-	//	return err
-	//}
-	w := resp.NewWriter(os.Stdout)
-
 	sc := bufio.NewScanner(os.Stdin)
-	for prompt(sc, addr) {
+	prompt := func(sc *bufio.Scanner) bool {
+		fmt.Printf("%s> ", name)
+		return sc.Scan()
+	}
+
+	for prompt(sc) {
 		line := sc.Text()
 
-		message := strings.Split(line, " ")
-		w.WriteMessage(message)
-		w.Flush()
+		parts := strings.Split(line, " ")
+		if err := runCmd(c, parts[0], parts[1:]); err != nil {
+			return err
+		}
 	}
 
 	return nil
