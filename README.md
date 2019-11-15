@@ -1,6 +1,6 @@
 # Keychain [![Actions Status](https://github.com/maybetheresloop/keychain/workflows/Go/badge.svg)](https://github.com/maybetheresloop/keychain) [![GoDoc](https://godoc.org/github.com/maybetheresloop/keychain?status.svg)](https://godoc.org/github.com/maybetheresloop/keychain) [![codecov](https://codecov.io/gh/maybetheresloop/keychain/branch/master/graph/badge.svg)](https://codecov.io/gh/maybetheresloop/keychain)
 
-Keychain is a Go implementation of the Bitcask key-value store. 🔑 
+Keychain is a Go implementation of the [Bitcask](https://github.com/basho/bitcask) key-value store. 🔑 
 
 ## Project Status
 
