@@ -27,4 +27,6 @@ jobs:
     - name: Build
       run: go build -v .
     - name: Test
-      run: make test
+      run: |
+        make cov
+        bash <(curl -s https://codecov.io/bash) -t 0fafeba1-83ae-4d3f-8a59-26e14f5f0834

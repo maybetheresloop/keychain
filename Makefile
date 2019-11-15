@@ -19,10 +19,13 @@ create-db:
 read:
 	go build -o bin/$@ -v ${MODULE}/tools/read
 
-.PHONY: clean test
+.PHONY: clean test cov
 
 clean:
 	rm -rf bin/
 
 test:
 	go test ${MODULE}/...
+
+cov:
+	go test ${MODULE}/... --coverprofile coverage.txt --covermode atomic
