@@ -8,10 +8,10 @@ keychain:
 	go build -o bin/$@ -v ${MODULE}/cmd/keychain
 
 keychain-server:
-	go build -o bin/$@ -v ${MODULE}/cmd/keychain-server
+	go build -o bin/$@ -v ${MODULE}/cmd/server
 
 keychain-cli:
-	go build -o bin/$@ -v ${MODULE}/cmd/keychain-cli
+	go build -o bin/$@ -v ${MODULE}/cmd/cli
 
 create-db:
 	go build -o bin/$@ -v ${MODULE}/tools/create-db
