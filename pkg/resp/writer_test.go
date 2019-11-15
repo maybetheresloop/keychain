@@ -59,3 +59,16 @@ func TestWriter_WriteBulkStringNil(t *testing.T) {
 
 	assert.Equal(t, []byte("$-1\r\n"), buf.Bytes())
 }
+
+func TestWriter_WriteArray(t *testing.T) {
+	buf := new(bytes.Buffer)
+	wr := NewWriter(buf)
+
+	err := wr.WriteArray([]interface{}{"simplestring", NewRespError("error"), 1, []byte("bulkstring")})
+	assert.Nil(t, err)
+
+	err = wr.Flush()
+	assert.Nil(t, err)
+
+	assert.Equal(t, []byte("*4\r\n+simplestring\r\n-error\r\n:1\r\n$10\r\nbulkstring\r\n"), buf.Bytes())
+}

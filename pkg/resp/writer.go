@@ -7,17 +7,32 @@ import (
 )
 
 type Writer struct {
-	wr *bufio.Writer
+	wr      *bufio.Writer
+	miscBuf []byte
 }
 
 func NewWriter(wr io.Writer) *Writer {
 	return &Writer{
-		wr: bufio.NewWriter(wr),
+		wr:      bufio.NewWriter(wr),
+		miscBuf: make([]byte, 0, 64),
 	}
 }
 
 func (w *Writer) Flush() error {
 	return w.wr.Flush()
+}
+
+func (w *Writer) WriteInteger(n int64) error {
+	if err := w.wr.WriteByte(Integer); err != nil {
+		return err
+	}
+
+	conv := strconv.AppendInt(w.miscBuf[:0], n, 10)
+	if _, err := w.wr.Write(conv); err != nil {
+		return err
+	}
+
+	return w.writeCRLF()
 }
 
 func (w *Writer) WriteMessage(message interface{}) error {
@@ -28,25 +43,36 @@ func (w *Writer) WriteMessage(message interface{}) error {
 		return w.WriteError(v)
 	case []byte:
 		return w.WriteBulkString(v)
-	case []interface{}:
-		return w.WriteArray(v)
+	case int:
+		return w.WriteInteger(int64(v))
+	case int32:
+		return w.WriteInteger(int64(v))
+	case int64:
+		return w.WriteInteger(v)
+	//case []interface{}:
+	//	return w.WriteArray(v)
 	default:
 		return ErrInvalidType(message)
 	}
 }
 
 func (w *Writer) WriteArray(s []interface{}) error {
-	if s == nil {
-		_, err := w.wr.Write([]byte("*-1\r\n"))
-		return err
-	}
 
-	l := len(s)
 	if err := w.wr.WriteByte(Array); err != nil {
 		return err
 	}
 
+	if s == nil {
+		_, err := w.wr.Write([]byte("-1\r\n"))
+		return err
+	}
+
+	l := len(s)
 	if _, err := w.wr.WriteString(strconv.Itoa(l)); err != nil {
+		return err
+	}
+
+	if err := w.writeCRLF(); err != nil {
 		return err
 	}
 
