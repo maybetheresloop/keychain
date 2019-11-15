@@ -16,7 +16,21 @@ func prompt(sc *bufio.Scanner, addr string) bool {
 	return sc.Scan()
 }
 
+func runCmd(cmd string, tail []string) error {
+	return nil
+}
+
 func run(c *cli.Context) error {
+	if c.NArg() > 0 {
+		return runCmd(c.Args().First(), c.Args().Tail())
+	}
+
+	return runCli(c)
+}
+
+func runCli(c *cli.Context) error {
+	fmt.Println(c.NArg())
+
 	fmt.Println("Welcome to keychain-cli!")
 
 	addr := fmt.Sprintf("%s:%d", c.String("host"), c.Uint("port"))
