@@ -15,7 +15,7 @@ type Reader struct {
 type ArrayParser func(r *Reader, num int64) (interface{}, error)
 
 // Convenience function for parsing a slice of strings.
-func StringSliceParser(r *Reader, num int64) ([]string, error) {
+func StringSliceParser(r *Reader, num int64) (interface{}, error) {
 
 	s := make([]string, 0, num)
 

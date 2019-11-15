@@ -65,7 +65,11 @@ func (w *Writer) WriteSimpleString(s string) error {
 	}
 
 	_, err := w.wr.WriteString(s)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return w.writeCRLF()
 }
 
 func (w *Writer) WriteError(respError RespError) error {
@@ -74,7 +78,11 @@ func (w *Writer) WriteError(respError RespError) error {
 	}
 
 	_, err := w.wr.WriteString(respError.message)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return w.writeCRLF()
 }
 
 func (w *Writer) WriteBulkString(b []byte) error {
@@ -82,7 +90,23 @@ func (w *Writer) WriteBulkString(b []byte) error {
 		return err
 	}
 
+	if b == nil {
+		if err := w.wr.WriteByte('-'); err != nil {
+			return err
+		}
+
+		if err := w.wr.WriteByte('1'); err != nil {
+			return err
+		}
+
+		return w.writeCRLF()
+	}
+
 	if _, err := w.wr.WriteString(strconv.Itoa(len(b))); err != nil {
+		return err
+	}
+
+	if err := w.writeCRLF(); err != nil {
 		return err
 	}
 
@@ -92,4 +116,12 @@ func (w *Writer) WriteBulkString(b []byte) error {
 
 	_, err := w.wr.Write([]byte("\r\n"))
 	return err
+}
+
+func (w *Writer) writeCRLF() error {
+	if err := w.wr.WriteByte('\r'); err != nil {
+		return err
+	}
+
+	return w.wr.WriteByte('\n')
 }

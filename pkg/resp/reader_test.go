@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestReadString(t *testing.T) {
@@ -24,6 +26,18 @@ func TestReadString(t *testing.T) {
 	if got != expected {
 		t.Fatalf("incorrect string - expected=%q, got=%q", expected, result)
 	}
+}
+
+func TestReadStringSlice(t *testing.T) {
+	input := "*3\r\n+foo\r\n+bar\r\n+baz\r\n"
+	expected := []string{"foo", "bar", "baz"}
+
+	r := NewReader(strings.NewReader(input))
+	res, err := r.ReadMessage(StringSliceParser)
+
+	assert.Nil(t, err)
+
+	assert.Equal(t, expected, res)
 }
 
 func TestReadError(t *testing.T) {
