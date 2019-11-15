@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"net"
 	"os"
+
+	"github.com/maybetheresloop/keychain/pkg/resp"
 
 	"github.com/maybetheresloop/keychain"
 	log "github.com/sirupsen/logrus"
@@ -12,9 +15,32 @@ import (
 const SockAddrUnix = "/var/keychain/keychain.sock"
 const SockAddrTcp = ":7878"
 
+func ParseBulkStringArray(r *resp.Reader, num int64) (interface{}, error) {
+
+	return nil, nil
+}
+
 // Processes a client connection. This can be a connection through either a TCP socket or a Unix domain socket.
-func processConnection(conn net.Conn, state *State) {
-	defer conn.Close()
+func processConnection(conn net.Conn, state *State) error {
+
+	r := resp.NewReader(conn)
+
+	res, err := r.ReadMessage(resp.BulkStringSliceParser)
+	if err != nil {
+		return err
+	}
+
+	value, ok := res.([][]byte)
+	if !ok {
+		return nil
+	}
+
+	if bytes.Compare(value[0], []byte("get")) == 0 {
+		state.keys.Get
+	}
+
+	return nil
+
 	//r := resp.NewReader(conn)
 	//w := resp
 	//

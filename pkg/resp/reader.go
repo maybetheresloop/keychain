@@ -35,6 +35,31 @@ func StringSliceParser(r *Reader, num int64) (interface{}, error) {
 	return s, nil
 }
 
+func BulkStringSliceParser(r *Reader, num int64) (interface{}, error) {
+	s := make([][]byte, 0, num)
+
+	for i := int64(0); i < num; i++ {
+		line, _, err := r.rd.ReadLine()
+		if err != nil {
+			return nil, err
+		}
+
+		length, err := strconv.ParseInt(string(line[1:]), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		b, err := r.readBulkString(length)
+		if err != nil {
+			return nil, err
+		}
+
+		s = append(s, b)
+	}
+
+	return s, nil
+}
+
 func (r *Reader) ReadMessage(parser ArrayParser) (interface{}, error) {
 	line, _, err := r.rd.ReadLine()
 	if err != nil {

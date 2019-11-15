@@ -2,6 +2,7 @@ package resp
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"strconv"
 )
@@ -82,6 +83,40 @@ func (w *Writer) WriteArray(s []interface{}) error {
 		}
 	}
 
+	return nil
+}
+
+// WriteCommand writes the provided slice as a RESP command, which is an array
+// of bulk strings. All of the supplied arguments will be converted to their representations
+// as a RESP bulk string.
+func (w *Writer) WriteCommand(args ...interface{}) error {
+	if err := w.WriteInteger(int64(len(args))); err != nil {
+		return err
+	}
+
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case string:
+			if err := w.WriteBulkString([]byte(v)); err != nil {
+				return err
+			}
+		case []byte:
+			if err := w.WriteBulkString(v); err != nil {
+				return err
+			}
+		//case int:
+		//	return w.WriteInteger(int64(v))
+		//case int32:
+		//	return w.WriteInteger(int64(v))
+		default:
+			return errors.New("unknown type")
+		}
+	}
+
+	return nil
+}
+
+func (w *Writer) WriteArgument(arg interface{}) error {
 	return nil
 }
 
