@@ -11,7 +11,7 @@ import (
 
 // Conf represents the configuration options for a Keychain store.
 type Conf struct {
-	sync bool
+	Sync bool
 }
 
 // Keychain represents an instance of a Keychain store.
@@ -70,7 +70,7 @@ func OpenConf(name string, conf *Conf) (*Keychain, error) {
 	}
 
 	if conf != nil {
-		keys.sync = conf.sync
+		keys.sync = conf.Sync
 	}
 
 	return keys, nil
