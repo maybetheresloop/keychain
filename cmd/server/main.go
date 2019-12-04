@@ -36,7 +36,7 @@ func processConnection(conn net.Conn, state *State) error {
 	}
 
 	if bytes.Compare(value[0], []byte("get")) == 0 {
-		state.keys.Get
+		//state.keys.Get
 	}
 
 	return nil

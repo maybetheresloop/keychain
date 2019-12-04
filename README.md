@@ -16,6 +16,8 @@ for updates! 😄
 - [x] Remove value for a key
 - [ ] Merge old files
 - [ ] Command-line shell
+- [ ] Benchmarks
+- [ ] Docker integration
 
 ### Long-Term
 - [ ] Transactions
