@@ -14,7 +14,8 @@ for updates! 😄
 - [x] Set key/value pair
 - [x] Get value for a key
 - [x] Remove value for a key
-- [ ] Merge old files
+- [ ] Database stored in directory instead of file
+- [ ] Periodic scanning and merging old files
 - [ ] Command-line shell
 - [ ] Benchmarks
 - [ ] Docker integration
