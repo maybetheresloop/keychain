@@ -4,13 +4,29 @@ import (
 	"bufio"
 	"encoding/binary"
 	"io"
+	"time"
 )
 
-type Writer struct {
-	wr *bufio.Writer
+type Clock interface {
+	Now() time.Time
 }
 
-func NewWriter(wr io.Writer) *Writer {
+type defaultClock struct{}
+
+func (d defaultClock) Now() time.Time {
+	return time.Now()
+}
+
+type Writer struct {
+	wr    *bufio.Writer
+	clock Clock
+}
+
+func NewWriter(wr io.Writer, clock Clock) *Writer {
+	if clock == nil {
+		clock = defaultClock{}
+	}
+
 	return &Writer{
 		wr: bufio.NewWriter(wr),
 	}
