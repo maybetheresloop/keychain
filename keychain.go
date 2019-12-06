@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/maybetheresloop/keychain/internal/data"
 	art "github.com/plar/go-adaptive-radix-tree"
@@ -11,7 +12,14 @@ import (
 
 // Conf represents the configuration options for a Keychain store.
 type Conf struct {
-	Sync bool
+	Sync  bool
+	clock data.Clock
+}
+
+type defaultClock struct{}
+
+func (d defaultClock) Now() time.Time {
+	return time.Now()
 }
 
 // Keychain represents an instance of a Keychain store.
@@ -60,10 +68,15 @@ func OpenConf(name string, conf *Conf) (*Keychain, error) {
 		entries.Insert(key, art.Value(entry))
 	}
 
+	var clock data.Clock = defaultClock{}
+	if conf != nil && conf.clock != nil {
+		clock = conf.clock
+	}
+
 	keys := &Keychain{
 		readHandle:  readHandle,
 		writeHandle: writeHandle,
-		writeBuffer: data.NewWriter(writeHandle),
+		writeBuffer: data.NewWriter(writeHandle, clock),
 		entries:     entries,
 		offset:      offset,
 		sync:        false,
@@ -99,7 +112,7 @@ func (k *Keychain) append(item *data.Item) error {
 		return err
 	}
 
-	k.offset += int64(2*8 + len(item.Key))
+	k.offset += valueOffset(len(item.Key))
 	if len(item.Value) > 0 {
 		k.offset += int64(len(item.Value))
 	}
@@ -233,6 +246,10 @@ func (k *Keychain) Close() error {
 	return nil
 }
 
+// Returns the offset of the value in an item with a key of the specified len.
+// This works out to the following:
+//
+//   timestamp (8 bytes) + key size (8 bytes) + value size (8 bytes) + key (key size bytes)
 func valueOffset(keyLen int) int64 {
-	return int64(2*8 + keyLen)
+	return int64(3*8 + keyLen)
 }

@@ -5,7 +5,17 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 )
+
+type testClock struct {
+	counter int64
+}
+
+func (t *testClock) Now() time.Time {
+	t.counter += 1
+	return time.Unix(0, t.counter)
+}
 
 func set(keys *Keychain, key []byte, value []byte, t *testing.T) {
 	if err := keys.Set(key, value); err != nil {
@@ -45,7 +55,9 @@ func TestAllOperations(t *testing.T) {
 
 	defer os.Remove(name)
 
-	keys, err := Open(name)
+	keys, err := OpenConf(name, &Conf{
+		clock: &testClock{},
+	})
 	if err != nil {
 		t.Fatalf("could not open database")
 	}
@@ -87,7 +99,9 @@ func TestAllOperations(t *testing.T) {
 	}
 
 	// Test reopen database
-	keys2, err := Open(name)
+	keys2, err := OpenConf(name, &Conf{
+		clock: &testClock{},
+	})
 	if err != nil {
 		t.Fatalf("could not reopen database: %v", err)
 	}

@@ -22,6 +22,13 @@ func NewEntryReader(rd io.Reader, fileID uint64) *EntryReader {
 }
 
 func (r *EntryReader) ReadEntry() (key []byte, entry *Entry, err error) {
+	var timestamp int64
+	if err = binary.Read(r.rd, binary.BigEndian, &timestamp); err != nil {
+		return
+	}
+
+	r.offset += 8
+
 	var keySize int64
 	if err = binary.Read(r.rd, binary.BigEndian, &keySize); err != nil {
 		return
@@ -53,6 +60,7 @@ func (r *EntryReader) ReadEntry() (key []byte, entry *Entry, err error) {
 	r.offset += n2
 
 	entry = &Entry{
+
 		FileID:    r.fileID,
 		ValueSize: valueSize,
 		ValuePos:  valuePos,

@@ -11,24 +11,15 @@ type Clock interface {
 	Now() time.Time
 }
 
-type defaultClock struct{}
-
-func (d defaultClock) Now() time.Time {
-	return time.Now()
-}
-
 type Writer struct {
 	wr    *bufio.Writer
 	clock Clock
 }
 
 func NewWriter(wr io.Writer, clock Clock) *Writer {
-	if clock == nil {
-		clock = defaultClock{}
-	}
-
 	return &Writer{
-		wr: bufio.NewWriter(wr),
+		clock: clock,
+		wr:    bufio.NewWriter(wr),
 	}
 }
 
@@ -37,6 +28,10 @@ func NewWriterFromBuffered(wr *bufio.Writer) *Writer {
 }
 
 func (w *Writer) WriteItem(item *Item) error {
+
+	if err := binary.Write(w.wr, binary.BigEndian, w.clock.Now().UnixNano()); err != nil {
+		return err
+	}
 
 	if err := binary.Write(w.wr, binary.BigEndian, item.KeySize); err != nil {
 		return err

@@ -7,7 +7,7 @@ import (
 )
 
 type Reader struct {
-	rd *bufio.Reader
+	rd     *bufio.Reader
 	offset uint64
 }
 
@@ -17,7 +17,18 @@ func NewReader(rd io.Reader) *Reader {
 	}
 }
 
+// Reads a Keychain item from the reader.
 func (r *Reader) ReadItem() (item *Item, err error) {
+
+	// Read the timestamp.
+	var timestamp uint64
+	if err := binary.Read(r.rd, binary.BigEndian, &timestamp); err != nil {
+		return nil, err
+	}
+
+	r.offset += 8
+
+	// Read the key size.
 	var keySize int64
 	if err := binary.Read(r.rd, binary.BigEndian, &keySize); err != nil {
 		return nil, err
@@ -38,19 +49,17 @@ func (r *Reader) ReadItem() (item *Item, err error) {
 		return nil, err
 	}
 
-
 	value := make([]byte, valueSize)
 	if _, err := io.ReadFull(r.rd, value); err != nil {
 		return nil, err
 	}
 
 	item = &Item{
-		KeySize: keySize,
+		KeySize:   keySize,
 		ValueSize: valueSize,
-		Key: key,
-		Value: value,
+		Key:       key,
+		Value:     value,
 	}
 
 	return
 }
-

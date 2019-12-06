@@ -1,6 +1,15 @@
 package data
 
+// An item stored in a Keychain database. An item has the following representation
+// when serialized to disk:
+//
+// +-----------+----------+-----+------------+-------+
+// | Timestamp | Key Size | Key | Value Size | Value |
+// +-----------+----------+-----+------------+-------+
+//
+// The item's timestamp is used to determine the most recent version of a item.
 type Item struct {
+	Timestamp int64
 	KeySize   int64
 	Key       []byte
 	ValueSize int64
