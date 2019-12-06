@@ -21,6 +21,9 @@ func NewEntryReader(rd io.Reader, fileID uint64) *EntryReader {
 	}
 }
 
+// Reads an entry from the Keychain database. To read an entry, we need only
+// read the timestamp, the key size, the value size, and the key itself, and
+// we can simply discard the value bytes.
 func (r *EntryReader) ReadEntry() (key []byte, entry *Entry, err error) {
 	var timestamp int64
 	if err = binary.Read(r.rd, binary.BigEndian, &timestamp); err != nil {
@@ -60,7 +63,6 @@ func (r *EntryReader) ReadEntry() (key []byte, entry *Entry, err error) {
 	r.offset += n2
 
 	entry = &Entry{
-
 		FileID:    r.fileID,
 		ValueSize: valueSize,
 		ValuePos:  valuePos,
