@@ -59,7 +59,7 @@ func TestAllOperations(t *testing.T) {
 		clock: &testClock{},
 	})
 	if err != nil {
-		t.Fatalf("could not open database")
+		t.Fatalf("could not open database, %v", err)
 	}
 
 	// Test setting keys

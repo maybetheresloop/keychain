@@ -7,6 +7,64 @@ import (
 	"io/ioutil"
 )
 
+// Reader for .hint files, which consist of only keys and value file offsets.
+type HintFileEntryReader struct {
+
+	// Internal buffered reader.
+	rd *bufio.Reader
+
+	// File ID to assign to the deserialized entries.
+	fileId int64
+}
+
+func NewHintFileEntryReader(rd io.Reader, fileId int64) *HintFileEntryReader {
+	return &HintFileEntryReader{
+		rd:     bufio.NewReader(rd),
+		fileId: fileId,
+	}
+}
+
+// Reads an entry from the .hint file. This consists of reading the timestamp,
+// the key and value sizes, the value position, and the key itself.
+func (r *HintFileEntryReader) ReadEntry() ([]byte, *Entry, error) {
+	// Read the timestamp.
+	var timestamp int64
+	if err := binary.Read(r.rd, binary.BigEndian, &timestamp); err != nil {
+		return nil, nil, err
+	}
+
+	// Read the key size.
+	var keySize int64
+	if err := binary.Read(r.rd, binary.BigEndian, &keySize); err != nil {
+		return nil, nil, err
+	}
+
+	// Read the key size.
+	var valueSize int64
+	if err := binary.Read(r.rd, binary.BigEndian, &valueSize); err != nil {
+		return nil, nil, err
+	}
+
+	// Read the value position.
+	var valuePos int64
+	if err := binary.Read(r.rd, binary.BigEndian, &valueSize); err != nil {
+		return nil, nil, err
+	}
+
+	// Read the key.
+	key := make([]byte, keySize)
+	if _, err := io.ReadFull(r.rd, key); err != nil {
+		return nil, nil, err
+	}
+
+	return key, &Entry{
+		Timestamp: timestamp,
+		FileID:    uint64(r.fileId),
+		ValueSize: valueSize,
+		ValuePos:  valuePos,
+	}, nil
+}
+
 type EntryReader struct {
 	rd     *bufio.Reader
 	offset int64

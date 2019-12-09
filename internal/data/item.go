@@ -16,7 +16,7 @@ type Item struct {
 	Value     []byte
 }
 
-func NewItem(key []byte, value []byte) *Item {
+func NewItem(key []byte, value []byte, timestamp int64) *Item {
 	keySize := -1
 	if key != nil {
 		keySize = len(key)
@@ -28,6 +28,7 @@ func NewItem(key []byte, value []byte) *Item {
 	}
 
 	return &Item{
+		Timestamp: timestamp,
 		KeySize:   int64(keySize),
 		ValueSize: int64(valueSize),
 		Key:       key,
@@ -35,8 +36,9 @@ func NewItem(key []byte, value []byte) *Item {
 	}
 }
 
-func NewItemDeleteMarker(key []byte) *Item {
+func NewItemDeleteMarker(key []byte, timestamp int64) *Item {
 	return &Item{
+		Timestamp: timestamp,
 		KeySize:   int64(len(key)),
 		Key:       key,
 		ValueSize: -1,

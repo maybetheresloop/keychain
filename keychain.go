@@ -3,11 +3,17 @@ package keychain
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/maybetheresloop/keychain/internal/data/handle"
+
 	"github.com/maybetheresloop/keychain/internal/data"
 	art "github.com/plar/go-adaptive-radix-tree"
+	log "github.com/sirupsen/logrus"
 )
 
 // Conf represents the configuration options for a Keychain store.
@@ -24,69 +30,155 @@ func (d defaultClock) Now() time.Time {
 
 // Keychain represents an instance of a Keychain store.
 type Keychain struct {
+	idCounter   uint64
+	clock       data.Clock
 	mtx         sync.RWMutex
 	readHandle  *os.File
 	writeHandle *os.File
 	writeBuffer *data.Writer
-	entries     art.Tree
-	counter     uint64
-	offset      int64
-	sync        bool
+
+	handles map[int64]*handle.Handle
+	entries art.Tree
+	counter uint64
+	offset  int64
+	sync    bool
 }
 
 // Opens a Keychain store using the specified file path and configuration. If the file does not exist,
 // then it is created.
-func OpenConf(name string, conf *Conf) (*Keychain, error) {
+func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 
-	// Two handles to the file: one is used for reading, the other is used for writing.
-	writeHandle, err := os.OpenFile(name, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	hasHintFile := make(map[int64]bool)
+
+	stat, err := os.Stat(dirname)
 	if err != nil {
 		return nil, err
 	}
 
-	readHandle, err := os.Open(name)
-	if err != nil {
+	if !stat.IsDir() {
+		return nil, errors.New("must refer to a directory")
+	}
+
+	// Get the list of paths that make up the database files. A database file name is of the form
+	// <timestamp>.keychain.dat, where <timestamp> is a Unix timestamp in nanoseconds. Also
+	// considered are hint files, which may accompany a data file. A hint file has a name of the
+	// form <timestamp>.keychain.hint.
+	hintPaths := make([]string, 0)
+	dataPaths := make([]string, 0)
+	if err := filepath.Walk(dirname, func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() && path != dirname {
+			return filepath.SkipDir
+		}
+
+		if strings.HasSuffix(path, ".data") {
+			dataPaths = append(dataPaths, path)
+		} else if strings.HasSuffix(path, ".hint") {
+			hintPaths = append(hintPaths, path)
+		}
+
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
-	// Also want to get the size of the file, so that we can keep track of the offsets
-	// of values in the file.
-	stat, err := writeHandle.Stat()
-	if err != nil {
-		return nil, err
-	}
-	offset := stat.Size()
+	// Process .hint files first.
+	for _, path := range hintPaths {
+		fileId, err := strconv.ParseInt(path[:strings.IndexByte(path, '.')], 10, 64)
+		if err != nil {
+			log.Warnf("Skipping hint file w/ malformed path: %s", path)
+		}
 
-	entries := art.New()
+		// Add the file's entries to our key map.
 
-	r := data.NewEntryReader(readHandle, 1)
-
-	// Populate radix tree with entries from the database file.
-	var entry *data.Entry
-	var key []byte
-	for key, entry, err = r.ReadEntry(); err == nil; key, entry, err = r.ReadEntry() {
-		entries.Insert(key, art.Value(entry))
+		// Add the file to the files we have seen.
+		hasHintFile[fileId] = true
 	}
 
-	var clock data.Clock = defaultClock{}
-	if conf != nil && conf.clock != nil {
-		clock = conf.clock
+	// Process .data files next. If the .data file has a corresponding .hint file that we already
+	// processed, then skip adding its entries.
+	for _, path := range dataPaths {
+		fileId, err := strconv.ParseInt(path[:strings.IndexByte(path, '.')], 10, 64)
+		if err != nil {
+			log.Warnf("Skipping data file w/ malformed path: %s", path)
+		}
+
+		r, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+
+		// If we haven't seen the file, add its entries to our key map.
+		rd := data.NewReader(r)
+		rd.ReadItem()
+
+		// Create a handle for the file.
+
 	}
 
-	keys := &Keychain{
-		readHandle:  readHandle,
-		writeHandle: writeHandle,
-		writeBuffer: data.NewWriter(writeHandle, clock),
-		entries:     entries,
-		offset:      offset,
-		sync:        false,
-	}
-
-	if conf != nil {
-		keys.sync = conf.Sync
-	}
-
-	return keys, nil
+	//// Two handles to the file: one is used for reading, the other is used for writing.
+	//writeHandle, err := os.OpenFile(dirname, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//readHandle, err := os.Open(dirname)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//// Also want to get the size of the file, so that we can keep track of the offsets
+	//// of values in the file.
+	//stat, err = writeHandle.Stat()
+	//if err != nil {
+	//	return nil, err
+	//}
+	//offset := stat.Size()
+	//
+	//entries := art.New()
+	//
+	//r := data.NewEntryReader(readHandle, 1)
+	//
+	//// Populate radix tree with entries from the database file.
+	//var entry *data.Entry
+	//var key []byte
+	//
+	//for key, entry, err = r.ReadEntry(); err == nil; key, entry, err = r.ReadEntry() {
+	//
+	//	// If an entry with the same key does not yet exist in the radix tree, insert it.
+	//	oldEntry, ok := entries.Search(key)
+	//	if !ok {
+	//		entries.Insert(key, art.Value(entry))
+	//	}
+	//
+	//	// Otherwise, check if the entry currently in the tree is older than the entry just
+	//	// read. If the existing entry is older, overwrite it with the fields of the new
+	//	// entry.
+	//	v := oldEntry.(*data.Entry)
+	//	if v.Timestamp <= entry.Timestamp {
+	//		*v = *entry
+	//	}
+	//}
+	//
+	//var clock data.Clock = defaultClock{}
+	//if conf != nil && conf.clock != nil {
+	//	clock = conf.clock
+	//}
+	//
+	//keys := &Keychain{
+	//	clock:       clock,
+	//	readHandle:  readHandle,
+	//	writeHandle: writeHandle,
+	//	writeBuffer: data.NewWriter(writeHandle, clock),
+	//	entries:     entries,
+	//	offset:      offset,
+	//	sync:        false,
+	//}
+	//
+	//if conf != nil {
+	//	keys.sync = conf.Sync
+	//}
+	//
+	//return keys, nil
 }
 
 // Opens a Keychain store using the specified file path. If the file does not exist, then
@@ -121,13 +213,13 @@ func (k *Keychain) append(item *data.Item) error {
 }
 
 // appendItem appends a key-value pair to the end of the store file's log.
-func (k *Keychain) appendItem(key []byte, value []byte) error {
-	return k.append(data.NewItem(key, value))
+func (k *Keychain) appendItem(key []byte, value []byte, timestamp int64) error {
+	return k.append(data.NewItem(key, value, timestamp))
 }
 
 // appendItemDelete appends a special delete marker for the specified key.
-func (k *Keychain) appendItemDelete(key []byte) error {
-	return k.append(data.NewItemDeleteMarker(key))
+func (k *Keychain) appendItemDelete(key []byte, timestamp int64) error {
+	return k.append(data.NewItemDeleteMarker(key, timestamp))
 }
 
 // Set inserts a key-value pair into the store. If the key already exists in the store, then
@@ -143,7 +235,9 @@ func (k *Keychain) Set(key []byte, value []byte) error {
 	// in the database with the same value. Otherwise, we would have to do a disk seek
 	// to check the current value, and in this case we have decided to optimize for performance
 	// and not for space.
-	if err := k.appendItem(key, value); err != nil {
+	ts := k.clock.Now().UnixNano()
+
+	if err := k.appendItem(key, value, ts); err != nil {
 		k.mtx.Unlock()
 		return err
 	}
@@ -159,7 +253,7 @@ func (k *Keychain) Set(key []byte, value []byte) error {
 		return nil
 	}
 
-	entry := data.NewEntry(0, valueSize, valuePos)
+	entry := data.NewEntry(0, valueSize, valuePos, ts)
 	k.entries.Insert(key, art.Value(entry))
 
 	k.mtx.Unlock()
@@ -211,7 +305,7 @@ func (k *Keychain) Remove(key []byte) (bool, error) {
 		if entry.ValueSize != -1 {
 			defer k.mtx.Unlock()
 
-			if err := k.appendItemDelete(key); err != nil {
+			if err := k.appendItemDelete(key, k.clock.Now().UnixNano()); err != nil {
 				return false, err
 			}
 
