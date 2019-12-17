@@ -10,17 +10,13 @@ import (
 // either an *os.File (used for the active file) or a *mmap.ReaderAt (used for
 // read-only files).
 type Handle struct {
-	// Active file use only.
-
-	// Read handle to the database file.
+	// Read handle to the database file (active handle only).
 	rd *os.File
 
-	// Write handle to the database file.
+	// Write handle to the database file (active handle only).
 	wr *os.File
 
-	// Read-only file use only.
-
-	// Read handle to the database file.
+	// Read handle to the database file (read-only handle only).
 	rda *mmap.ReaderAt
 }
 

@@ -2,6 +2,8 @@ package keychain
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -38,33 +40,22 @@ type Keychain struct {
 	writeBuffer *data.Writer
 
 	handles map[int64]*handle.Handle
+	active  *handle.Handle
+
 	entries art.Tree
 	counter uint64
 	offset  int64
 	sync    bool
 }
 
-// Opens a Keychain store using the specified file path and configuration. If the file does not exist,
-// then it is created.
-func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
-
-	hasHintFile := make(map[int64]bool)
-
-	stat, err := os.Stat(dirname)
-	if err != nil {
-		return nil, err
-	}
-
-	if !stat.IsDir() {
-		return nil, errors.New("must refer to a directory")
-	}
-
-	// Get the list of paths that make up the database files. A database file name is of the form
-	// <timestamp>.keychain.dat, where <timestamp> is a Unix timestamp in nanoseconds. Also
-	// considered are hint files, which may accompany a data file. A hint file has a name of the
-	// form <timestamp>.keychain.hint.
+// Gets the list of paths that make up the database files from the specified directory.
+// A database file name is of the form <timestamp>.keychain.dat, where <timestamp> is a
+// Unix timestamp in nanoseconds. Also considered are hint files, which may accompany a
+// data file. A hint file has a name of the form <timestamp>.keychain.hint.
+func scanDatabaseFilePaths(dirname string) ([]string, []string, error) {
 	hintPaths := make([]string, 0)
 	dataPaths := make([]string, 0)
+
 	if err := filepath.Walk(dirname, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && path != dirname {
 			return filepath.SkipDir
@@ -78,19 +69,48 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 
 		return nil
 	}); err != nil {
+		return nil, nil, err
+	}
+
+	return hintPaths, dataPaths, nil
+}
+
+// Opens a Keychain store using the specified file path and configuration. If the file does not exist,
+// then it is created.
+func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
+
+	entries := art.New()
+	handles := make(map[int64]*handle.Handle)
+
+	hasHintFile := make(map[int64]bool)
+
+	stat, err := os.Stat(dirname)
+	if err != nil {
 		return nil, err
 	}
 
-	// Process .hint files first.
+	if !stat.IsDir() {
+		return nil, errors.New("must refer to a directory")
+	}
+
+	// Get the lists of database files in the database directory.
+	hintPaths, dataPaths, err := scanDatabaseFilePaths(dirname)
+	if err != nil {
+		return nil, err
+	}
+
+	// Populate the in-memory index, processing .hint files first.
 	for _, path := range hintPaths {
 		fileId, err := strconv.ParseInt(path[:strings.IndexByte(path, '.')], 10, 64)
 		if err != nil {
 			log.Warnf("Skipping hint file w/ malformed path: %s", path)
 		}
 
-		// Add the file's entries to our key map.
+		if err := addHintFileEntries(entries, path, fileId); err != nil {
+			return nil, err
+		}
 
-		// Add the file to the files we have seen.
+		// Add the file ID to the file IDs we have seen.
 		hasHintFile[fileId] = true
 	}
 
@@ -102,18 +122,32 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 			log.Warnf("Skipping data file w/ malformed path: %s", path)
 		}
 
-		r, err := os.Open(path)
+		// If we haven't seen this file ID yet, open the file and add its entries to our key
+		if !hasHintFile[fileId] {
+			if err := addDataFileEntries(entries, path, fileId); err != nil {
+				return nil, err
+			}
+		}
+
+		// Create a read-only handle for the file.
+		h, err := handle.Open(path, true)
 		if err != nil {
 			return nil, err
 		}
 
-		// If we haven't seen the file, add its entries to our key map.
-		rd := data.NewReader(r)
-		rd.ReadItem()
-
-		// Create a handle for the file.
-
+		handles[fileId] = h
 	}
+
+	// Create the active database file.
+	activeId := time.Now().UnixNano()
+	activeName := fmt.Sprintf("%d.keychain.data", activeId)
+
+	h, err := handle.Open(activeName, false)
+	if err != nil {
+		return nil, err
+	}
+
+	handles[activeId] = h
 
 	//// Two handles to the file: one is used for reading, the other is used for writing.
 	//writeHandle, err := os.OpenFile(dirname, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -179,6 +213,72 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 	//}
 	//
 	//return keys, nil
+	return nil, nil
+}
+
+func addHintFileEntries(entries art.Tree, path string, fileId int64) error {
+	// Open the file, and add it's entries to our key map.
+	r, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	rd := data.NewHintFileEntryReader(r, fileId)
+	for {
+		key, entry, err := rd.ReadEntry()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		insertEntry(entries, key, entry)
+	}
+
+	return nil
+}
+
+func addDataFileEntries(entries art.Tree, path string, fileId int64) error {
+	r, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+
+	rd := data.NewEntryReader(r, uint64(fileId))
+	for {
+		key, entry, err := rd.ReadEntry()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			if err2 := r.Close(); err2 != nil {
+				return err2
+			}
+			return err
+		}
+		insertEntry(entries, key, entry)
+	}
+
+	if err := r.Close(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Inserts a key-entry pair into the provided entry map. If an entry already
+// exists for the given key, it will be overwritten if the entry passed in is
+// newer than the existing entry.
+func insertEntry(entries art.Tree, key []byte, entry *data.Entry) {
+	old, ok := entries.Search(key)
+	if !ok {
+		entries.Insert(key, art.Value(entry))
+	}
+
+	if old.(*data.Entry).Timestamp <= entry.Timestamp {
+		*old.(*data.Entry) = *entry
+	}
 }
 
 // Opens a Keychain store using the specified file path. If the file does not exist, then
