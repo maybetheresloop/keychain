@@ -36,9 +36,17 @@ var commands = map[string]*command{
 		argc:    -1,
 		handler: del,
 	},
-	"merge": {
+	".merge": {
 		argc:    0,
 		handler: merge,
+	},
+	".exit": {
+		argc: 0,
+		handler: func(c *client, args []string) (interface{}, error) {
+
+			os.Exit(0)
+			return nil, nil
+		},
 	},
 }
 
@@ -131,7 +139,6 @@ type client struct {
 	remote *remoteClient
 	name   string
 	mode   int // 0 for local, 1 for remote
-	//remote *conn
 }
 
 func newClient(cfg *config) (*client, error) {

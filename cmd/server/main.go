@@ -105,9 +105,9 @@ func main() {
 	app.Action = run
 
 	fileFlag := cli.StringFlag{
-		Name:      "file, f",
+		Name:      "datadir, D",
 		Required:  true,
-		Usage:     "Database FILE to use",
+		Usage:     "Database DIR to use.",
 		TakesFile: true,
 	}
 
