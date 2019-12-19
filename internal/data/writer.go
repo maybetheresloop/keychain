@@ -12,14 +12,14 @@ type Clock interface {
 }
 
 type Writer struct {
-	wr    *bufio.Writer
+	wr    io.Writer
 	clock Clock
 }
 
 func NewWriter(wr io.Writer, clock Clock) *Writer {
 	return &Writer{
 		clock: clock,
-		wr:    bufio.NewWriter(wr),
+		wr:    wr,
 	}
 }
 
@@ -56,6 +56,6 @@ func (w *Writer) WriteItem(item *Item) error {
 	return nil
 }
 
-func (w *Writer) Flush() error {
-	return w.wr.Flush()
-}
+//func (w *Writer) Flush() error {
+//	return w.wr.Flush()
+//}

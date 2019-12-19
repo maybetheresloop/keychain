@@ -42,20 +42,14 @@ func remove(keys *Keychain, key []byte, t *testing.T) {
 }
 
 func TestAllOperations(t *testing.T) {
-	f, err := ioutil.TempFile("/tmp", "keychain-test")
+	dirname, err := ioutil.TempDir("", "datadir")
 	if err != nil {
-		t.Fatalf("could not create temp file: %v", err)
+		t.Fatalf("could not create temp directory: %v", err)
 	}
 
-	name := f.Name()
+	defer os.RemoveAll(dirname)
 
-	if f.Close() != nil {
-		t.Fatalf("could not close temp file: %v", err)
-	}
-
-	defer os.Remove(name)
-
-	keys, err := OpenConf(name, &Conf{
+	keys, err := OpenConf(dirname, &Conf{
 		clock: &testClock{},
 	})
 	if err != nil {
@@ -99,7 +93,7 @@ func TestAllOperations(t *testing.T) {
 	}
 
 	// Test reopen database
-	keys2, err := OpenConf(name, &Conf{
+	keys2, err := OpenConf(dirname, &Conf{
 		clock: &testClock{},
 	})
 	if err != nil {

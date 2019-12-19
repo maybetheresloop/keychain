@@ -11,15 +11,14 @@ import (
 type HintFileEntryReader struct {
 
 	// Internal buffered reader.
-	rd *bufio.Reader
+	rd io.Reader
 
-	// File ID to assign to the deserialized entries.
-	fileId int64
+	fileId int64 // File ID to assign to the deserialized entries.
 }
 
 func NewHintFileEntryReader(rd io.Reader, fileId int64) *HintFileEntryReader {
 	return &HintFileEntryReader{
-		rd:     bufio.NewReader(rd),
+		rd:     rd,
 		fileId: fileId,
 	}
 }
@@ -39,7 +38,7 @@ func (r *HintFileEntryReader) ReadEntry() ([]byte, *Entry, error) {
 		return nil, nil, err
 	}
 
-	// Read the key size.
+	// Read the value size.
 	var valueSize int64
 	if err := binary.Read(r.rd, binary.BigEndian, &valueSize); err != nil {
 		return nil, nil, err
@@ -47,7 +46,7 @@ func (r *HintFileEntryReader) ReadEntry() ([]byte, *Entry, error) {
 
 	// Read the value position.
 	var valuePos int64
-	if err := binary.Read(r.rd, binary.BigEndian, &valueSize); err != nil {
+	if err := binary.Read(r.rd, binary.BigEndian, &valuePos); err != nil {
 		return nil, nil, err
 	}
 

@@ -1,19 +1,18 @@
 package data
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 )
 
 type Reader struct {
-	rd     *bufio.Reader
+	rd     io.Reader
 	offset uint64
 }
 
 func NewReader(rd io.Reader) *Reader {
 	return &Reader{
-		rd: bufio.NewReader(rd),
+		rd: rd,
 	}
 }
 

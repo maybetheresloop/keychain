@@ -32,20 +32,17 @@ func (d defaultClock) Now() time.Time {
 
 // Keychain represents an instance of a Keychain store.
 type Keychain struct {
-	idCounter   uint64
-	clock       data.Clock
-	mtx         sync.RWMutex
-	readHandle  *os.File
-	writeHandle *os.File
-	writeBuffer *data.Writer
-
-	handles map[int64]*handle.Handle
-	active  *handle.Handle
-
-	entries art.Tree
-	counter uint64
-	offset  int64
-	sync    bool
+	idCounter    uint64
+	clock        data.Clock
+	mtx          sync.RWMutex
+	handles      map[int64]*handle.Handle
+	active       *handle.Handle
+	activeWriter *data.Writer
+	activeFileId int64
+	entries      art.Tree
+	counter      uint64
+	offset       int64
+	sync         bool
 }
 
 // Gets the list of paths that make up the database files from the specified directory.
@@ -75,12 +72,17 @@ func scanDatabaseFilePaths(dirname string) ([]string, []string, error) {
 	return hintPaths, dataPaths, nil
 }
 
+func getFileId(path string) (int64, error) {
+	return strconv.ParseInt(path[:strings.IndexByte(path, '.')], 10, 64)
+}
+
 // Opens a Keychain store using the specified file path and configuration. If the file does not exist,
 // then it is created.
 func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
-
-	entries := art.New()
-	handles := make(map[int64]*handle.Handle)
+	k := &Keychain{
+		entries: art.New(),
+		handles: make(map[int64]*handle.Handle),
+	}
 
 	hasHintFile := make(map[int64]bool)
 
@@ -101,12 +103,12 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 
 	// Populate the in-memory index, processing .hint files first.
 	for _, path := range hintPaths {
-		fileId, err := strconv.ParseInt(path[:strings.IndexByte(path, '.')], 10, 64)
+		fileId, err := getFileId(path)
 		if err != nil {
 			log.Warnf("Skipping hint file w/ malformed path: %s", path)
 		}
 
-		if err := addHintFileEntries(entries, path, fileId); err != nil {
+		if err := k.addHintFileEntries(path, fileId); err != nil {
 			return nil, err
 		}
 
@@ -117,16 +119,11 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 	// Process .data files next. If the .data file has a corresponding .hint file that we already
 	// processed, then skip adding its entries.
 	for _, path := range dataPaths {
-		fileId, err := strconv.ParseInt(path[:strings.IndexByte(path, '.')], 10, 64)
+		fileId, err := getFileId(filepath.Base(path))
+
+		log.Infof("Opening file: %s", path)
 		if err != nil {
 			log.Warnf("Skipping data file w/ malformed path: %s", path)
-		}
-
-		// If we haven't seen this file ID yet, open the file and add its entries to our key
-		if !hasHintFile[fileId] {
-			if err := addDataFileEntries(entries, path, fileId); err != nil {
-				return nil, err
-			}
 		}
 
 		// Create a read-only handle for the file.
@@ -134,20 +131,43 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 		if err != nil {
 			return nil, err
 		}
+		k.handles[fileId] = h
 
-		handles[fileId] = h
+		log.Infof("created handle")
+
+		// If we haven't seen this file ID yet, open the file and add its entries to our key
+		if !hasHintFile[fileId] {
+
+			log.Infof("adding entries")
+			if err := k.addDataFileEntriesReader(h, fileId); err != nil {
+				return nil, err
+			}
+
+			log.Infof("done adding entries")
+		}
 	}
 
 	// Create the active database file.
-	activeId := time.Now().UnixNano()
-	activeName := fmt.Sprintf("%d.keychain.data", activeId)
+	k.activeFileId = time.Now().UnixNano()
 
-	h, err := handle.Open(activeName, false)
+	activePath := filepath.Join(dirname, fmt.Sprintf("%d.keychain.data", k.activeFileId))
+
+	//log.Warnf("opening active file, %s", activePath)
+
+	active, err := handle.Open(activePath, false)
 	if err != nil {
 		return nil, err
 	}
 
-	handles[activeId] = h
+	if conf != nil && conf.clock != nil {
+		k.clock = conf.clock
+	} else {
+		k.clock = defaultClock{}
+	}
+
+	k.handles[k.activeFileId] = active
+	k.active = active
+	k.activeWriter = data.NewWriter(active, k.clock)
 
 	//// Two handles to the file: one is used for reading, the other is used for writing.
 	//writeHandle, err := os.OpenFile(dirname, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -213,10 +233,26 @@ func OpenConf(dirname string, conf *Conf) (*Keychain, error) {
 	//}
 	//
 	//return keys, nil
-	return nil, nil
+	return k, nil
 }
 
-func addHintFileEntries(entries art.Tree, path string, fileId int64) error {
+func addHintFileEntriesReader(entries art.Tree, r io.Reader, fileId int64) error {
+	rd := data.NewHintFileEntryReader(r, fileId)
+	for {
+		key, entry, err := rd.ReadEntry()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		insertEntry(entries, key, entry)
+	}
+
+	return nil
+}
+
+func (k *Keychain) addHintFileEntries(path string, fileId int64) error {
 	// Open the file, and add it's entries to our key map.
 	r, err := os.Open(path)
 	if err != nil {
@@ -233,18 +269,15 @@ func addHintFileEntries(entries art.Tree, path string, fileId int64) error {
 		if err != nil {
 			return err
 		}
-		insertEntry(entries, key, entry)
+		if prev := insertEntry(k.entries, key, entry); prev != -1 {
+			k.handles[prev].DeadKey()
+		}
 	}
 
 	return nil
 }
 
-func addDataFileEntries(entries art.Tree, path string, fileId int64) error {
-	r, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-
+func (k *Keychain) addDataFileEntriesReader(r io.Reader, fileId int64) error {
 	rd := data.NewEntryReader(r, uint64(fileId))
 	for {
 		key, entry, err := rd.ReadEntry()
@@ -252,33 +285,35 @@ func addDataFileEntries(entries art.Tree, path string, fileId int64) error {
 			break
 		}
 		if err != nil {
-			if err2 := r.Close(); err2 != nil {
-				return err2
-			}
 			return err
 		}
-		insertEntry(entries, key, entry)
-	}
 
-	if err := r.Close(); err != nil {
-		return err
+		if prev := insertEntry(k.entries, key, entry); prev != -1 {
+			k.handles[prev].DeadKey()
+		}
 	}
-
 	return nil
 }
 
 // Inserts a key-entry pair into the provided entry map. If an entry already
 // exists for the given key, it will be overwritten if the entry passed in is
 // newer than the existing entry.
-func insertEntry(entries art.Tree, key []byte, entry *data.Entry) {
+func insertEntry(entries art.Tree, key []byte, entry *data.Entry) int64 {
 	old, ok := entries.Search(key)
 	if !ok {
 		entries.Insert(key, art.Value(entry))
+		return -1
 	}
 
-	if old.(*data.Entry).Timestamp <= entry.Timestamp {
+	var fileId int64 = -1
+
+	v := old.(*data.Entry)
+	if v.Timestamp <= entry.Timestamp {
+		fileId = int64(v.FileID)
 		*old.(*data.Entry) = *entry
 	}
+
+	return fileId
 }
 
 // Opens a Keychain store using the specified file path. If the file does not exist, then
@@ -291,16 +326,13 @@ func Open(name string) (*Keychain, error) {
 // the underlying buffer. Additionally, this will call Sync() on the underlying file
 // so that the new item is synchronized to disk.
 func (k *Keychain) append(item *data.Item) error {
-	if err := k.writeBuffer.WriteItem(item); err != nil {
-		return err
-	}
-
-	if err := k.writeBuffer.Flush(); err != nil {
+	log.Println("writing")
+	if err := k.activeWriter.WriteItem(item); err != nil {
 		return err
 	}
 
 	// Sync the new items to the underlying storage.
-	if err := k.writeHandle.Sync(); err != nil {
+	if err := k.active.Sync(); err != nil {
 		return err
 	}
 
@@ -348,12 +380,13 @@ func (k *Keychain) Set(key []byte, value []byte) error {
 		entry := v.(*data.Entry)
 		entry.ValuePos = valuePos
 		entry.ValueSize = valueSize
+		entry.FileID = uint64(k.activeFileId)
 
 		k.mtx.Unlock()
 		return nil
 	}
 
-	entry := data.NewEntry(0, valueSize, valuePos, ts)
+	entry := data.NewEntry(uint64(k.activeFileId), valueSize, valuePos, ts)
 	k.entries.Insert(key, art.Value(entry))
 
 	k.mtx.Unlock()
@@ -361,9 +394,11 @@ func (k *Keychain) Set(key []byte, value []byte) error {
 }
 
 // Reads a value of the given size at the offset.
-func (k *Keychain) readValue(offset int64, size int64) ([]byte, error) {
+func readValue(h *handle.Handle, offset int64, size int64) ([]byte, error) {
 	value := make([]byte, size)
-	n, err := k.readHandle.ReadAt(value, offset)
+	log.Printf("reading at %d", offset)
+	n, err := h.ReadAt(value, offset)
+	log.Print("done reading")
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +427,8 @@ func (k *Keychain) Get(key []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	return k.readValue(entry.ValuePos, entry.ValueSize)
+	h := k.handles[int64(entry.FileID)]
+	return readValue(h, entry.ValuePos, entry.ValueSize)
 }
 
 // Removes a key-value pair from the store. Returns true only if an item was removed.
@@ -418,23 +454,25 @@ func (k *Keychain) Remove(key []byte) (bool, error) {
 	return false, nil
 }
 
-// Flushes the underlying write buffer.
-func (k *Keychain) Flush() error {
-	return k.writeBuffer.Flush()
+//// Flushes the underlying write buffer.
+//func (k *Keychain) Flush() error {
+//	return k.activeWriter.Flush()
+//}
+
+func (k *Keychain) Sync() error {
+	return k.active.Sync()
 }
 
 // Closes the store.
 func (k *Keychain) Close() error {
-	if err := k.Flush(); err != nil {
+	if err := k.Sync(); err != nil {
 		return err
 	}
 
-	if err := k.readHandle.Close(); err != nil {
-		return err
-	}
-
-	if err := k.writeHandle.Close(); err != nil {
-		return err
+	for _, h := range k.handles {
+		if err := h.Close(); err != nil {
+			return err
+		}
 	}
 
 	return nil
