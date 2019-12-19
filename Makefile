@@ -2,16 +2,13 @@ BIN_DIR=bin
 MODULE=github.com/maybetheresloop/keychain
 
 .PHONY: all
-all: keychain-server keychain-cli create-db read
+all: keychain-server keychain-cli read
 
 keychain-server:
 	go build -o bin/$@ -v ${MODULE}/cmd/server
 
 keychain-cli:
 	go build -o bin/$@ -v ${MODULE}/cmd/cli
-
-create-db:
-	go build -o bin/$@ -v ${MODULE}/tools/create-db
 
 read:
 	go build -o bin/$@ -v ${MODULE}/tools/read
