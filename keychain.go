@@ -1,6 +1,7 @@
 package keychain
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -327,7 +328,7 @@ func Open(name string) (*Keychain, error) {
 // so that the new item is synchronized to disk.
 func (k *Keychain) append(item *data.Item) error {
 	log.Println("writing")
-	if err := k.activeWriter.WriteItem(item); err != nil {
+	if _, err := k.activeWriter.WriteItem(item); err != nil {
 		return err
 	}
 
@@ -484,4 +485,65 @@ func (k *Keychain) Close() error {
 //   timestamp (8 bytes) + key size (8 bytes) + value size (8 bytes) + key (key size bytes)
 func valueOffset(keyLen int) int64 {
 	return int64(3*8 + keyLen)
+}
+
+func (k *Keychain) Merge() {
+
+}
+
+// Merges the database files corresponding to the specified file IDs.
+func (k *Keychain) MergeFiles(fileIds []int64) error {
+	mergedId := time.Now().UnixNano()
+	mergedPath := fmt.Sprintf("%d.keychain.data", mergedId)
+	merged, err := handle.Open(mergedPath, false)
+	if err != nil {
+		return err
+	}
+	k.handles[mergedId] = merged
+	mergedWriter := data.NewWriter(merged, k.clock)
+
+	for _, fileId := range fileIds {
+		filename := fmt.Sprintf("%d.keychain.data", fileId)
+		f, err := os.Open(filename)
+		if err != nil {
+			log.Warnf("Failed to open file for merging, skipping: %s", filename)
+		}
+
+		r := data.NewReader(bufio.NewReader(f))
+
+		for {
+			item, err := r.ReadItem()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return err
+			}
+
+			entry, ok := k.entries.Search(item.Key)
+			if !ok {
+				panic(errors.New("unreachable"))
+			}
+
+			v := entry.(*data.Entry)
+			if item.Timestamp < v.Timestamp {
+				continue
+			}
+
+			// Otherwise, the item is the current version. Write the item to the merged file
+			// and update its entry in the key hash table.
+			offset, err := mergedWriter.WriteItem(item)
+			if err != nil {
+				return err
+			}
+
+			v.FileID = uint64(mergedId)
+			v.ValuePos = offset
+		}
+
+		if err != io.EOF {
+			return err
+		}
+	}
+
+	return nil
 }
